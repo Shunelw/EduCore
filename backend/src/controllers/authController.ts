@@ -1,3 +1,5 @@
+import { prisma } from "../config/prisma";
+import { generateToken } from "../utils/jwt";
 import { Request, Response } from "express";
 import { msalClient } from "../config/auth";
 
@@ -43,11 +45,75 @@ export const callback = async (
             });
         }
 
+        const account = result.account;
+
+        const email = account.username;
+
+        if (!email || !email.endsWith("@au.edu")) {
+            return res.status(403).json({
+                message: "Only AU university accounts are allowed",
+            });
+        }
+
+        // Find user by Microsoft ID first
+        let user = await prisma.user.findUnique({
+            where: {
+                microsoftId: account.homeAccountId,
+            },
+            include: {
+                role: true,
+            },
+        });
+
+        // If not found, try university email
+        if (!user) {
+            user = await prisma.user.findUnique({
+                where: {
+                    email,
+                },
+                include: {
+                    role: true,
+                },
+            });
+        }
+
+        // Account must already exist in EduCore
+        if (!user) {
+            return res.status(403).json({
+                message:
+                    "Your university account is not registered in EduCore",
+            });
+        }
+
+        // Connect Microsoft account to existing EduCore user
+        if (!user.microsoftId) {
+            user = await prisma.user.update({
+                where: {
+                    id: user.id,
+                },
+                data: {
+                    microsoftId: account.homeAccountId,
+                },
+                include: {
+                    role: true,
+                },
+            });
+        }
+
+        const token = generateToken({
+            id: user.id,
+            email: user.email,
+            role: user.role.roleName,
+        });
+
         res.json({
-            message: "Microsoft login successful",
+            message: "Login successful",
+            token,
             user: {
-                name: result.account.name,
-                username: result.account.username,
+                id: user.id,
+                name: user.name,
+                email: user.email,
+                role: user.role.roleName,
             },
         });
     } catch (error) {
