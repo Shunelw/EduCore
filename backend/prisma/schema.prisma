@@ -1,0 +1,84 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+}
+
+enum EnrollmentStatus {
+  ACTIVE
+  DROPPED
+}
+
+model Role {
+  id       Int    @id @default(autoincrement())
+  roleName String @unique
+
+  users User[]
+}
+
+model User {
+  id          Int    @id @default(autoincrement())
+  microsoftId String? @unique
+  name        String
+  email       String @unique
+  department  String?
+  roleId      Int
+
+  role        Role         @relation(fields: [roleId], references: [id])
+  courses     Course[]
+  sections    Section[]
+  enrollments Enrollment[]
+}
+
+model Course {
+  id           Int     @id @default(autoincrement())
+  courseCode   String  @unique
+  title        String
+  description  String?
+  credits      Int
+  department   String
+  isbn         String?
+  textbookInfo Json?
+  createdBy    Int
+
+  creator  User      @relation(fields: [createdBy], references: [id])
+  sections Section[]
+}
+
+model Semester {
+  id        Int      @id @default(autoincrement())
+  name      String
+  startDate DateTime
+  endDate   DateTime
+
+  sections Section[]
+}
+
+model Section {
+  id          Int    @id @default(autoincrement())
+  courseId    Int
+  semesterId  Int
+  professorId Int
+  capacity    Int
+  schedule    String
+
+  course      Course       @relation(fields: [courseId], references: [id])
+  semester    Semester     @relation(fields: [semesterId], references: [id])
+  professor   User         @relation(fields: [professorId], references: [id])
+  enrollments Enrollment[]
+}
+
+model Enrollment {
+  id        Int              @id @default(autoincrement())
+  studentId Int
+  sectionId Int
+  status    EnrollmentStatus @default(ACTIVE)
+  createdAt DateTime         @default(now())
+
+  student User    @relation(fields: [studentId], references: [id])
+  section Section @relation(fields: [sectionId], references: [id])
+
+  @@unique([studentId, sectionId])
+}
