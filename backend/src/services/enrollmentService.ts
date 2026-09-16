@@ -60,3 +60,42 @@ export const createEnrollment = async ({
         },
     });
 };
+
+export const getEnrollmentsByStudent = async (studentId: number) => {
+    return prisma.enrollment.findMany({
+        where: { studentId },
+        include: {
+            section: {
+                include: {
+                    course: true,
+                    semester: true,
+                },
+            },
+        },
+        orderBy: {
+            createdAt: "desc",
+        },
+    });
+};
+
+export const dropEnrollment = async (
+    enrollmentId: number,
+    studentId: number
+) => {
+    const enrollment = await prisma.enrollment.findUnique({
+        where: { id: enrollmentId },
+    });
+
+    if (!enrollment || enrollment.studentId !== studentId) {
+        throw new Error("Enrollment not found");
+    }
+
+    if (enrollment.status === "DROPPED") {
+        throw new Error("Enrollment is already dropped");
+    }
+
+    return prisma.enrollment.update({
+        where: { id: enrollmentId },
+        data: { status: "DROPPED" },
+    });
+};

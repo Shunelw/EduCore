@@ -23,6 +23,7 @@ export const createCourse = async (data: {
     credits: number;
     department: string;
     isbn?: string;
+    textbookInfo?: object;
     createdBy: number;
 }) => {
     return prisma.course.create({
@@ -33,19 +34,24 @@ export const createCourse = async (data: {
 export const updateCourse = async (
     id: number,
     data: {
-        courseCode?: string;
-        title?: string;
-        description?: string;
-        credits?: number;
-        department?: string;
-        isbn?: string;
+        courseCode?: string | undefined;
+        title?: string | undefined;
+        description?: string | undefined;
+        credits?: number | undefined;
+        department?: string | undefined;
+        isbn?: string | undefined;
+        textbookInfo?: object | undefined;
     }
 ) => {
+    const updateData = Object.fromEntries(
+        Object.entries(data).filter(([, value]) => value !== undefined)
+    );
+
     return prisma.course.update({
         where: {
             id,
         },
-        data,
+        data: updateData,
     });
 };
 

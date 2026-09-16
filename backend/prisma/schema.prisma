@@ -25,6 +25,7 @@ model User {
   email       String @unique
   department  String?
   roleId      Int
+  lastLoginAt DateTime?
 
   role        Role         @relation(fields: [roleId], references: [id])
   courses     Course[]

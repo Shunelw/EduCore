@@ -6,6 +6,8 @@ import {
     updateCourse,
     deleteCourse,
 } from "../services/courseService";
+import { fetchTextbookInfo } from "../services/openLibraryService";
+import { AuthRequest } from "../middleware/authMiddleware";
 
 export const getCourses = async (
     _req: Request,
@@ -66,11 +68,27 @@ export const getCourse = async (
 };
 
 export const createNewCourse = async (
-    req: Request,
+    req: AuthRequest,
     res: Response
 ) => {
     try {
-        const course = await createCourse(req.body);
+        const { courseCode, title, description, credits, department, isbn } =
+            req.body;
+
+        const textbookInfo = isbn
+            ? await fetchTextbookInfo(isbn)
+            : null;
+
+        const course = await createCourse({
+            courseCode,
+            title,
+            description,
+            credits: Number(credits),
+            department,
+            isbn,
+            createdBy: req.user!.userId,
+            ...(textbookInfo ? { textbookInfo } : {}),
+        });
 
         res.status(201).json({
             success: true,
@@ -100,7 +118,22 @@ export const updateExistingCourse = async (
             });
         }
 
-        const course = await updateCourse(id, req.body);
+        const { courseCode, title, description, credits, department, isbn } =
+            req.body;
+
+        const textbookInfo = isbn
+            ? await fetchTextbookInfo(isbn)
+            : null;
+
+        const course = await updateCourse(id, {
+            courseCode,
+            title,
+            description,
+            credits: credits !== undefined ? Number(credits) : undefined,
+            department,
+            isbn,
+            ...(textbookInfo ? { textbookInfo } : {}),
+        });
 
         res.json({
             success: true,

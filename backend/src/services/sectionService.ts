@@ -6,6 +6,13 @@ export const getAllSections = async () => {
             course: true,
             semester: true,
             professor: true,
+            _count: {
+                select: {
+                    enrollments: {
+                        where: { status: "ACTIVE" },
+                    },
+                },
+            },
         },
         orderBy: {
             id: "asc",
@@ -20,7 +27,21 @@ export const getSectionById = async (id: number) => {
             course: true,
             semester: true,
             professor: true,
-            enrollments: true,
+            enrollments: {
+                where: { status: "ACTIVE" },
+                include: {
+                    student: {
+                        select: { id: true, name: true, email: true },
+                    },
+                },
+            },
+            _count: {
+                select: {
+                    enrollments: {
+                        where: { status: "ACTIVE" },
+                    },
+                },
+            },
         },
     });
 };
@@ -40,16 +61,20 @@ export const createSection = async (data: {
 export const updateSection = async (
     id: number,
     data: {
-        courseId?: number;
-        semesterId?: number;
-        professorId?: number;
-        capacity?: number;
-        schedule?: string;
+        courseId?: number | undefined;
+        semesterId?: number | undefined;
+        professorId?: number | undefined;
+        capacity?: number | undefined;
+        schedule?: string | undefined;
     }
 ) => {
+    const updateData = Object.fromEntries(
+        Object.entries(data).filter(([, value]) => value !== undefined)
+    );
+
     return prisma.section.update({
         where: { id },
-        data,
+        data: updateData,
     });
 };
 

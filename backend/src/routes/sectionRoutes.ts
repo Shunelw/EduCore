@@ -8,12 +8,42 @@ import {
     removeSection,
 } from "../controllers/sectionController";
 
+import { authenticate } from "../middleware/authMiddleware";
+import { authorize } from "../middleware/roleMiddleware";
+
 const router = Router();
 
-router.get("/", getSections);
-router.get("/:id", getSection);
-router.post("/", createNewSection);
-router.put("/:id", updateExistingSection);
-router.delete("/:id", removeSection);
+router.get(
+    "/",
+    authenticate,
+    getSections
+);
+
+router.get(
+    "/:id",
+    authenticate,
+    getSection
+);
+
+router.post(
+    "/",
+    authenticate,
+    authorize("PROFESSOR", "ADMIN"),
+    createNewSection
+);
+
+router.put(
+    "/:id",
+    authenticate,
+    authorize("PROFESSOR", "ADMIN"),
+    updateExistingSection
+);
+
+router.delete(
+    "/:id",
+    authenticate,
+    authorize("ADMIN"),
+    removeSection
+);
 
 export default router;
