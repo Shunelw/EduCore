@@ -2,6 +2,11 @@ node_modules/
 .env
 .env.*
 !.env.example
+!.env.prod.example
+
+# Runtime Let's Encrypt account data and private keys.
+deploy/certbot/conf*/
+deploy/certbot/www/
 
 dist/
 build/

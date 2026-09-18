@@ -1,0 +1,107 @@
+services:
+  db:
+    image: mariadb:11
+    restart: unless-stopped
+    environment:
+      MARIADB_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:?Set DB_ROOT_PASSWORD in .env.prod}
+      MARIADB_DATABASE: ${DB_NAME:?Set DB_NAME in .env.prod}
+      MARIADB_USER: ${DB_USER:?Set DB_USER in .env.prod}
+      MARIADB_PASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD in .env.prod}
+    volumes:
+      - db_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+    networks:
+      - internal
+
+  backend:
+    build: ./backend
+    restart: unless-stopped
+    env_file: ./backend/.env
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      DB_HOST: db
+      DB_USER: ${DB_USER:?Set DB_USER in .env.prod}
+      DB_PASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD in .env.prod}
+      DB_NAME: ${DB_NAME:?Set DB_NAME in .env.prod}
+      DATABASE_URL: mysql://${DB_USER}:${DB_PASSWORD}@db:3306/${DB_NAME}
+      FRONTEND_URL: https://${DOMAIN:?Set DOMAIN in .env.prod}
+      AZURE_REDIRECT_URI: https://${DOMAIN}/api/auth/callback
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - fetch('http://localhost:3000/api/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 60s
+    networks:
+      - internal
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        VITE_API_URL: https://${DOMAIN:?Set DOMAIN in .env.prod}
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_started
+    networks:
+      - internal
+
+  nginx:
+    image: nginx:stable-alpine
+    restart: unless-stopped
+    environment:
+      DOMAIN: ${DOMAIN:?Set DOMAIN in .env.prod}
+      NGINX_ENVSUBST_FILTER: DOMAIN
+    volumes:
+      - ./deploy/nginx/default.conf.template:/etc/nginx/templates/default.conf.template:ro
+      - ./deploy/certbot/www:/var/www/certbot:ro
+      - ./deploy/certbot/conf:/etc/letsencrypt:ro
+    ports:
+      - "80:80"
+      - "443:443"
+    depends_on:
+      frontend:
+        condition: service_started
+      backend:
+        condition: service_started
+    command: >-
+      /bin/sh -c 'while :; do sleep 6h; nginx -s reload; done &
+      exec nginx -g "daemon off;"'
+    networks:
+      - internal
+
+  certbot:
+    image: certbot/certbot:latest
+    restart: unless-stopped
+    volumes:
+      - ./deploy/certbot/www:/var/www/certbot
+      - ./deploy/certbot/conf:/etc/letsencrypt
+    entrypoint: /bin/sh
+    command: >-
+      -c 'trap exit TERM; while :; do
+      certbot renew --webroot --webroot-path=/var/www/certbot --quiet;
+      sleep 12h;
+      done'
+    networks:
+      - internal
+
+volumes:
+  db_data:
+
+networks:
+  internal:
+    driver: bridge

@@ -234,6 +234,67 @@ To stop the services without deleting database data:
 docker compose down
 ```
 
+## Production deployment with HTTPS
+
+The production stack in `docker-compose.prod.yml` places Nginx in front of the
+frontend and API, redirects HTTP to HTTPS, and uses Certbot for Let's Encrypt
+certificate issuance and renewal. Only ports 80 and 443 are published; the
+API and database remain on Docker's internal network.
+
+Before the first deployment:
+
+1. Point the domain's DNS `A`/`AAAA` records to the server and allow inbound
+   TCP ports 80 and 443 through the host and cloud firewalls.
+2. Copy the production environment template and replace every example value:
+
+   ```bash
+   cp .env.prod.example .env.prod
+   ```
+
+3. Configure `backend/.env` with the Azure tenant, application, and Key Vault
+   settings described below. The Key Vault `db-password` value must equal
+   `DB_PASSWORD` in `.env.prod`. Use URL-safe characters in the database
+   password because Compose places it in `DATABASE_URL`.
+4. Add this exact Web redirect URI to the Microsoft Entra app registration,
+   replacing the example host with `DOMAIN` from `.env.prod`:
+
+   ```text
+   https://app.example.com/api/auth/callback
+   ```
+
+Run the first-deployment helper from the repository root:
+
+```bash
+./deploy/init-letsencrypt.sh
+```
+
+The helper builds the application, briefly creates a local bootstrap
+certificate so Nginx can start, obtains the trusted certificate through the
+HTTP-01 challenge, reloads Nginx, and starts automatic renewal. It is safe to
+run again when a certificate already exists. For a rehearsal, set
+`CERTBOT_STAGING=1`. Staging certificates are not browser-trusted. Before the
+real issuance, stop the stack, change the value back to `0`, move
+`deploy/certbot/conf` to `deploy/certbot/conf-staging`, and rerun the helper.
+Keeping the renamed directory provides a recoverable backup while ensuring
+Certbot creates a new production certificate lineage.
+
+For later application updates, rebuild and restart the stack with:
+
+```bash
+docker compose --env-file .env.prod -f docker-compose.prod.yml up -d --build
+```
+
+Inspect service health and Certbot renewal logs with:
+
+```bash
+docker compose --env-file .env.prod -f docker-compose.prod.yml ps
+docker compose --env-file .env.prod -f docker-compose.prod.yml logs certbot
+```
+
+Certificate state is kept under `deploy/certbot/conf/` and database state is
+kept in the `db_data` Docker volume. Both survive ordinary container restarts.
+Back up both locations as part of the server backup policy.
+
 ## API overview
 
 All JSON APIs use the `/api` prefix. Except for login, callback, health, and the partner endpoint, protected requests require:
@@ -351,7 +412,9 @@ Still required or incomplete:
 - The JWT is returned in the callback query string and stored in browser local storage. A production security review should consider a short-lived handoff and secure, HTTP-only cookies.
 - Prisma migration files are not present in the current working tree. Local and container setup therefore uses `prisma db push`; formal migrations should be restored or created before production deployment.
 - HelpDesk API consumption is not implemented.
-- Azure VM deployment, shared-server Nginx routing, Let's Encrypt HTTPS, and final production validation are not included yet.
+- Final production validation on the target VM is still required; DNS,
+  firewall rules, Microsoft Entra configuration, and Azure Key Vault access
+  depend on the deployment environment.
 
 ## Security notes
 
