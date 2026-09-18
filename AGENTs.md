@@ -1231,4 +1231,3 @@ The project is finished when we can demonstrate:
  
 This is the complete EduCore project roadmap.  
 your-domain.com
- 

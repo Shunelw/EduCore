@@ -3,11 +3,18 @@ import { prisma } from "../config/prisma";
 export const verifyStudentByEmail = async (email: string) => {
     const student = await prisma.user.findUnique({
         where: {
-            email: email.toLowerCase(),
+            email: email.trim().toLowerCase(),
         },
-        include: {
-            role: true,
-            enrollments: true,
+        select: {
+            department: true,
+            role: {
+                select: { roleName: true },
+            },
+            enrollments: {
+                where: { status: "ACTIVE" },
+                select: { id: true },
+                take: 1,
+            },
         },
     });
 
@@ -15,12 +22,11 @@ export const verifyStudentByEmail = async (email: string) => {
         return null;
     }
 
-    const isEnrolled = student.enrollments.some(
-        (enrollment) => enrollment.status === "ACTIVE"
-    );
+    const department = student.department?.trim() || null;
 
     return {
-        department: student.department,
-        isEnrolled,
+        department,
+        departmentConfigured: department !== null,
+        isEnrolled: student.enrollments.length > 0,
     };
 };

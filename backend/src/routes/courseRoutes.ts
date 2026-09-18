@@ -2,6 +2,7 @@ import { Router } from "express";
 import {
     getCourses,
     getCourse,
+    lookupTextbook,
     createNewCourse,
     updateExistingCourse,
     removeCourse,
@@ -16,6 +17,13 @@ router.get(
     "/",
     authenticate,
     getCourses
+);
+
+router.get(
+    "/textbooks/lookup",
+    authenticate,
+    authorize("PROFESSOR", "ADMIN"),
+    lookupTextbook
 );
 
 router.get(

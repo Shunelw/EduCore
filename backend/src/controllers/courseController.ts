@@ -6,7 +6,12 @@ import {
     updateCourse,
     deleteCourse,
 } from "../services/courseService";
-import { fetchTextbookInfo } from "../services/openLibraryService";
+import { Prisma } from "@prisma/client";
+import {
+    fetchTextbookInfo,
+    isValidIsbn,
+    normalizeIsbn,
+} from "../services/openLibraryService";
 import { AuthRequest } from "../middleware/authMiddleware";
 
 export const getCourses = async (
@@ -67,6 +72,44 @@ export const getCourse = async (
     }
 };
 
+export const lookupTextbook = async (
+    req: Request,
+    res: Response
+) => {
+    const rawIsbn = typeof req.query.isbn === "string" ? req.query.isbn : "";
+    const isbn = normalizeIsbn(rawIsbn);
+
+    if (!isValidIsbn(isbn)) {
+        return res.status(400).json({
+            success: false,
+            message: "Enter a valid ISBN-10 or ISBN-13",
+        });
+    }
+
+    let textbookInfo;
+
+    try {
+        textbookInfo = await fetchTextbookInfo(isbn);
+    } catch {
+        return res.status(503).json({
+            success: false,
+            message: "Open Library is temporarily unavailable. Try again later.",
+        });
+    }
+
+    if (!textbookInfo) {
+        return res.status(404).json({
+            success: false,
+            message: "No textbook was found for this ISBN",
+        });
+    }
+
+    return res.json({
+        success: true,
+        data: textbookInfo,
+    });
+};
+
 export const createNewCourse = async (
     req: AuthRequest,
     res: Response
@@ -75,9 +118,37 @@ export const createNewCourse = async (
         const { courseCode, title, description, credits, department, isbn } =
             req.body;
 
-        const textbookInfo = isbn
-            ? await fetchTextbookInfo(isbn)
-            : null;
+        const normalizedIsbn = typeof isbn === "string"
+            ? normalizeIsbn(isbn)
+            : "";
+
+        if (normalizedIsbn && !isValidIsbn(normalizedIsbn)) {
+            return res.status(400).json({
+                success: false,
+                message: "Enter a valid ISBN-10 or ISBN-13",
+            });
+        }
+
+        let textbookInfo = null;
+
+        if (normalizedIsbn) {
+            try {
+                textbookInfo = await fetchTextbookInfo(normalizedIsbn);
+            } catch {
+                return res.status(503).json({
+                    success: false,
+                    message:
+                        "Open Library is temporarily unavailable. Remove the ISBN or try again later.",
+                });
+            }
+
+            if (!textbookInfo) {
+                return res.status(404).json({
+                    success: false,
+                    message: "No textbook was found for this ISBN",
+                });
+            }
+        }
 
         const course = await createCourse({
             courseCode,
@@ -85,8 +156,8 @@ export const createNewCourse = async (
             description,
             credits: Number(credits),
             department,
-            isbn,
             createdBy: req.user!.userId,
+            ...(normalizedIsbn ? { isbn: normalizedIsbn } : {}),
             ...(textbookInfo ? { textbookInfo } : {}),
         });
 
@@ -118,12 +189,58 @@ export const updateExistingCourse = async (
             });
         }
 
+        const existingCourse = await getCourseById(id);
+
+        if (!existingCourse) {
+            return res.status(404).json({
+                success: false,
+                message: "Course not found",
+            });
+        }
+
         const { courseCode, title, description, credits, department, isbn } =
             req.body;
 
-        const textbookInfo = isbn
-            ? await fetchTextbookInfo(isbn)
-            : null;
+        const isbnWasProvided = isbn !== undefined;
+        const normalizedIsbn = typeof isbn === "string"
+            ? normalizeIsbn(isbn)
+            : "";
+        const isbnChanged =
+            isbnWasProvided &&
+            normalizedIsbn !== (existingCourse.isbn ?? "");
+        const textbookInfoMissing = existingCourse.textbookInfo === null;
+
+        if (normalizedIsbn && !isValidIsbn(normalizedIsbn)) {
+            return res.status(400).json({
+                success: false,
+                message: "Enter a valid ISBN-10 or ISBN-13",
+            });
+        }
+
+        let textbookInfo = null;
+
+        if (
+            isbnWasProvided &&
+            normalizedIsbn &&
+            (isbnChanged || textbookInfoMissing)
+        ) {
+            try {
+                textbookInfo = await fetchTextbookInfo(normalizedIsbn);
+            } catch {
+                return res.status(503).json({
+                    success: false,
+                    message:
+                        "Open Library is temporarily unavailable. Remove the ISBN or try again later.",
+                });
+            }
+
+            if (!textbookInfo) {
+                return res.status(404).json({
+                    success: false,
+                    message: "No textbook was found for this ISBN",
+                });
+            }
+        }
 
         const course = await updateCourse(id, {
             courseCode,
@@ -131,8 +248,14 @@ export const updateExistingCourse = async (
             description,
             credits: credits !== undefined ? Number(credits) : undefined,
             department,
-            isbn,
-            ...(textbookInfo ? { textbookInfo } : {}),
+            ...(isbnWasProvided
+                ? {
+                      isbn: normalizedIsbn || null,
+                  }
+                : {}),
+            ...(isbnChanged || (normalizedIsbn && textbookInfoMissing)
+                ? { textbookInfo: textbookInfo ?? Prisma.DbNull }
+                : {}),
         });
 
         res.json({

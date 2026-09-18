@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { ArrowLeft, BookImage, Users, Calendar, Check } from "lucide-react";
 import { api, ApiError } from "../../lib/api";
-import type { Course, Section } from "../../types";
+import type { Course, Enrollment, Section } from "../../types";
 import { Button } from "../../components/ui/Button";
 import { Badge } from "../../components/ui/Badge";
 
@@ -20,13 +20,19 @@ export const CourseDetailPage = () => {
         Promise.all([
             api.get<{ data: Course }>(`/api/courses/${id}`),
             api.get<{ data: Section[] }>("/api/sections"),
+            api.get<{ data: Enrollment[] }>("/api/enrollments/me"),
         ])
-            .then(([courseRes, sectionRes]) => {
+            .then(([courseRes, sectionRes, enrollmentRes]) => {
                 setCourse(courseRes.data);
                 setSections(
                     sectionRes.data.filter(
                         (s) => s.courseId === Number(id)
                     )
+                );
+                setRegisteredIds(
+                    enrollmentRes.data
+                        .filter((enrollment) => enrollment.status === "ACTIVE")
+                        .map((enrollment) => enrollment.sectionId)
                 );
             })
             .finally(() => setLoading(false));
@@ -40,7 +46,9 @@ export const CourseDetailPage = () => {
 
         try {
             await api.post("/api/enrollments", { sectionId });
-            setRegisteredIds((prev) => [...prev, sectionId]);
+            setRegisteredIds((prev) =>
+                prev.includes(sectionId) ? prev : [...prev, sectionId]
+            );
             load();
         } catch (err) {
             setError(
@@ -115,10 +123,22 @@ export const CourseDetailPage = () => {
                                 {info.authors.join(", ")}
                             </p>
                         )}
-                        {info.publishYear && (
+                        {(info.edition || info.publishYear) && (
                             <p className="mt-0.5 text-xs text-zinc-400">
-                                Published {info.publishYear}
+                                {[info.edition, info.publishYear]
+                                    .filter(Boolean)
+                                    .join(" · ")}
                             </p>
+                        )}
+                        {course.isbn && (
+                            <a
+                                href={`https://openlibrary.org/isbn/${encodeURIComponent(course.isbn)}`}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="mt-2 inline-block text-xs font-medium text-zinc-500 underline decoration-zinc-300 underline-offset-2 hover:text-zinc-800"
+                            >
+                                View on Open Library
+                            </a>
                         )}
                     </div>
                 </div>

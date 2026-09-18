@@ -51,7 +51,18 @@ export const createEnrollment = async ({
         throw new Error("Section is full");
     }
 
-    // 5. Create enrollment
+    // 5. A dropped enrollment still owns the unique student/section pair.
+    // Reactivate it instead of trying to insert a duplicate row.
+    if (existingEnrollment) {
+        return prisma.enrollment.update({
+            where: { id: existingEnrollment.id },
+            data: {
+                status: "ACTIVE",
+                createdAt: new Date(),
+            },
+        });
+    }
+
     return prisma.enrollment.create({
         data: {
             studentId,

@@ -29,18 +29,18 @@ app.use("/api/partner", partnerRoutes);
 app.use("/api/semesters", semesterRoutes);
 app.use("/api/admin", adminRoutes);
 
-// app.get("/api/health", (_req, res) => {
-//     res.json({
-//         success: true,
-//         message: "EduCore API is running",
-//     });
-// });
-
-app.get("/api/health", authenticate, (_req, res) => {
+app.get("/api/health", (_req, res) => {
     res.json({
         success: true,
         message: "EduCore API is running",
     });
 });
+
+// app.get("/api/health", authenticate, (_req, res) => {
+//     res.json({
+//         success: true,
+//         message: "EduCore API is running",
+//     });
+// });
 
 export default app;

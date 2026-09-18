@@ -1,5 +1,26 @@
+export const isAdminEmail = (email: string): boolean => {
+    const normalizedEmail = email.trim().toLowerCase();
+
+    if (!normalizedEmail) {
+        return false;
+    }
+
+    const adminEmails = (process.env.ADMIN_EMAILS || "")
+        .split(",")
+        .map((adminEmail) => adminEmail.trim().toLowerCase())
+        .filter(Boolean);
+
+    return adminEmails.includes(normalizedEmail);
+};
+
 export const getInitialRole = (email: string): string | null => {
-    const username = email.split("@")[0];
+    const normalizedEmail = email.trim().toLowerCase();
+
+    if (isAdminEmail(normalizedEmail)) {
+        return "ADMIN";
+    }
+
+    const username = normalizedEmail.split("@")[0];
 
     if (!username) {
         return null;
@@ -11,7 +32,5 @@ export const getInitialRole = (email: string): string | null => {
     }
 
     // Any non-student account (e.g. kwankamol@au.edu) starts as PROFESSOR.
-    // ADMIN is never auto-assigned here — promote a user to ADMIN manually
-    // (directly in the database, or via an admin-only endpoint later).
     return "PROFESSOR";
 };

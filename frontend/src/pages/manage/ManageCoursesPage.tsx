@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { Plus, Pencil, Trash2, Layers, BookImage } from "lucide-react";
 import { api, ApiError } from "../../lib/api";
-import type { Course } from "../../types";
+import type { Course, TextbookInfo } from "../../types";
 import { useAuth } from "../../context/AuthContext";
 import { Button } from "../../components/ui/Button";
 import { Modal, Field, inputClass } from "../../components/ui/Modal";
@@ -32,6 +32,9 @@ export const ManageCoursesPage = () => {
     const [editing, setEditing] = useState<Course | null | "new">(null);
     const [form, setForm] = useState<CourseForm>(emptyForm);
     const [saving, setSaving] = useState(false);
+    const [lookingUp, setLookingUp] = useState(false);
+    const [textbookPreview, setTextbookPreview] =
+        useState<TextbookInfo | null>(null);
     const [error, setError] = useState<string | null>(null);
 
     const load = () => {
@@ -50,6 +53,8 @@ export const ManageCoursesPage = () => {
 
     const openCreate = () => {
         setForm(emptyForm);
+        setTextbookPreview(null);
+        setError(null);
         setEditing("new");
     };
 
@@ -62,7 +67,30 @@ export const ManageCoursesPage = () => {
             department: course.department,
             isbn: course.isbn || "",
         });
+        setTextbookPreview(course.textbookInfo);
+        setError(null);
         setEditing(course);
+    };
+
+    const handleTextbookLookup = async () => {
+        setLookingUp(true);
+        setTextbookPreview(null);
+        setError(null);
+
+        try {
+            const response = await api.get<{ data: TextbookInfo }>(
+                `/api/courses/textbooks/lookup?isbn=${encodeURIComponent(form.isbn)}`
+            );
+            setTextbookPreview(response.data);
+        } catch (err) {
+            setError(
+                err instanceof ApiError
+                    ? err.message
+                    : "Unable to look up this textbook"
+            );
+        } finally {
+            setLookingUp(false);
+        }
     };
 
     const handleSave = async () => {
@@ -75,7 +103,7 @@ export const ManageCoursesPage = () => {
             description: form.description || undefined,
             credits: Number(form.credits),
             department: form.department,
-            isbn: form.isbn || undefined,
+            isbn: form.isbn.trim() || null,
         };
 
         try {
@@ -264,19 +292,74 @@ export const ManageCoursesPage = () => {
                                 />
                             </Field>
                             <Field label="Textbook ISBN (optional)">
-                                <input
-                                    className={inputClass}
-                                    value={form.isbn}
-                                    onChange={(e) =>
-                                        setForm({
-                                            ...form,
-                                            isbn: e.target.value,
-                                        })
-                                    }
-                                    placeholder="9780132350884"
-                                />
+                                <div className="flex gap-2">
+                                    <input
+                                        className={inputClass}
+                                        value={form.isbn}
+                                        onChange={(e) => {
+                                            setForm({
+                                                ...form,
+                                                isbn: e.target.value,
+                                            });
+                                            setTextbookPreview(null);
+                                        }}
+                                        placeholder="9780132350884"
+                                    />
+                                    <Button
+                                        variant="secondary"
+                                        onClick={handleTextbookLookup}
+                                        disabled={
+                                            lookingUp || !form.isbn.trim()
+                                        }
+                                    >
+                                        {lookingUp ? "Looking..." : "Look up"}
+                                    </Button>
+                                </div>
                             </Field>
                         </div>
+
+                        {textbookPreview && (
+                            <div className="flex gap-3 rounded-lg border border-emerald-200 bg-emerald-50 p-3">
+                                {textbookPreview.coverUrl ? (
+                                    <img
+                                        src={textbookPreview.coverUrl}
+                                        alt={textbookPreview.title}
+                                        className="h-20 w-14 shrink-0 rounded object-cover"
+                                    />
+                                ) : (
+                                    <div className="flex h-20 w-14 shrink-0 items-center justify-center rounded bg-white">
+                                        <BookImage
+                                            size={18}
+                                            className="text-zinc-300"
+                                        />
+                                    </div>
+                                )}
+                                <div className="min-w-0">
+                                    <p className="text-xs font-medium uppercase tracking-wide text-emerald-700">
+                                        Open Library match
+                                    </p>
+                                    <p className="mt-0.5 text-sm font-semibold text-zinc-900">
+                                        {textbookPreview.title}
+                                    </p>
+                                    {textbookPreview.authors.length > 0 && (
+                                        <p className="text-xs text-zinc-600">
+                                            {textbookPreview.authors.join(", ")}
+                                        </p>
+                                    )}
+                                    {(textbookPreview.edition ||
+                                        textbookPreview.publishYear) && (
+                                        <p className="mt-1 text-xs text-zinc-500">
+                                            {[
+                                                textbookPreview.edition,
+                                                textbookPreview.publishYear,
+                                            ]
+                                                .filter(Boolean)
+                                                .join(" · ")}
+                                        </p>
+                                    )}
+                                </div>
+                            </div>
+                        )}
 
                         {error && (
                             <p className="text-sm text-red-600">{error}</p>
@@ -290,7 +373,11 @@ export const ManageCoursesPage = () => {
                                 Cancel
                             </Button>
                             <Button onClick={handleSave} disabled={saving}>
-                                {saving ? "Saving..." : "Save"}
+                                {saving
+                                    ? form.isbn.trim()
+                                        ? "Saving & looking up..."
+                                        : "Saving..."
+                                    : "Save"}
                             </Button>
                         </div>
                     </div>

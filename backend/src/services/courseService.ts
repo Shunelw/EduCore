@@ -1,3 +1,4 @@
+import { Prisma } from "@prisma/client";
 import { prisma } from "../config/prisma";
 
 export const getAllCourses = async () => {
@@ -39,8 +40,8 @@ export const updateCourse = async (
         description?: string | undefined;
         credits?: number | undefined;
         department?: string | undefined;
-        isbn?: string | undefined;
-        textbookInfo?: object | undefined;
+        isbn?: string | null | undefined;
+        textbookInfo?: object | typeof Prisma.DbNull | undefined;
     }
 ) => {
     const updateData = Object.fromEntries(

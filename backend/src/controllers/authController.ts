@@ -1,6 +1,6 @@
 import { prisma } from "../config/prisma";
 import { generateToken } from "../utils/jwt";
-import { getInitialRole } from "../utils/accountRole";
+import { getInitialRole, isAdminEmail } from "../utils/accountRole";
 import { Request, Response } from "express";
 import { msalClient } from "../config/auth";
 import { AuthRequest } from "../middleware/authMiddleware";
@@ -54,10 +54,10 @@ export const callback = async (
         console.log("username:", account.username);
         console.log("homeAccountId:", account.homeAccountId);
 
-        const email = account.username;
+        const email = account.username.trim().toLowerCase();
 
         let user = await prisma.user.findUnique({
-            where: { email: email.toLowerCase() },
+            where: { email },
             include: { role: true },
         });
 
@@ -86,7 +86,7 @@ export const callback = async (
                 data: {
                     microsoftId: account.homeAccountId,
                     name: account.name || email,
-                    email: email.toLowerCase(),
+                    email,
                     roleId: role.id,
                 },
                 include: {
@@ -95,8 +95,13 @@ export const callback = async (
             });
         }
 
-        // Connect Microsoft account to existing EduCore user
-        // and record this login for system activity monitoring
+        // An allowlisted account is promoted on login whether it is new or
+        // already exists. Removing it from ADMIN_EMAILS does not auto-demote it.
+        const promoteToAdmin =
+            isAdminEmail(email) && user.role.roleName !== "ADMIN";
+
+        // Connect Microsoft account to existing EduCore user, apply any admin
+        // promotion, and record this login for system activity monitoring.
         user = await prisma.user.update({
             where: {
                 id: user.id,
@@ -104,6 +109,13 @@ export const callback = async (
             data: {
                 microsoftId: user.microsoftId || account.homeAccountId,
                 lastLoginAt: new Date(),
+                ...(promoteToAdmin
+                    ? {
+                          role: {
+                              connect: { roleName: "ADMIN" },
+                          },
+                      }
+                    : {}),
             },
             include: {
                 role: true,

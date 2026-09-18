@@ -19,8 +19,32 @@ interface SectionForm {
     semesterId: string;
     professorId: string;
     capacity: string;
-    schedule: string;
+    meetingDays: string[];
+    startTime: string;
+    endTime: string;
 }
+
+const WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+
+const emptySchedule = {
+    meetingDays: [] as string[],
+    startTime: "",
+    endTime: "",
+};
+
+const parseSchedule = (schedule: string) => {
+    const match = schedule.match(
+        /^((?:Mon|Tue|Wed|Thu|Fri|Sat|Sun)(?:\/(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun))*)\s+(\d{2}:\d{2})-(\d{2}:\d{2})$/
+    );
+
+    if (!match) return emptySchedule;
+
+    return {
+        meetingDays: match[1]!.split("/"),
+        startTime: match[2]!,
+        endTime: match[3]!,
+    };
+};
 
 export const ManageSectionsPage = () => {
     const { id } = useParams();
@@ -38,7 +62,7 @@ export const ManageSectionsPage = () => {
         semesterId: "",
         professorId: String(user?.id || ""),
         capacity: "30",
-        schedule: "",
+        ...emptySchedule,
     });
     const [saving, setSaving] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -88,10 +112,14 @@ export const ManageSectionsPage = () => {
     const openCreate = () => {
         setForm({
             semesterId: semesters[0] ? String(semesters[0].id) : "",
-            professorId: String(user?.id || ""),
+            professorId:
+                user?.role === "ADMIN"
+                    ? String(professors[0]?.id || "")
+                    : String(user?.id || ""),
             capacity: "30",
-            schedule: "",
+            ...emptySchedule,
         });
+        setError(null);
         setEditing("new");
     };
 
@@ -100,21 +128,50 @@ export const ManageSectionsPage = () => {
             semesterId: String(section.semesterId),
             professorId: String(section.professorId),
             capacity: String(section.capacity),
-            schedule: section.schedule,
+            ...parseSchedule(section.schedule),
         });
+        setError(null);
         setEditing(section);
     };
 
     const handleSave = async () => {
-        setSaving(true);
         setError(null);
+
+        if (
+            !form.semesterId ||
+            !form.professorId ||
+            form.meetingDays.length === 0 ||
+            !form.startTime ||
+            !form.endTime
+        ) {
+            setError("Choose a semester, professor, meeting day, and time.");
+            return;
+        }
+
+        if (form.endTime <= form.startTime) {
+            setError("End time must be later than start time.");
+            return;
+        }
+
+        const capacity = Number(form.capacity);
+
+        if (!Number.isInteger(capacity) || capacity < 1) {
+            setError("Capacity must be a whole number greater than zero.");
+            return;
+        }
+
+        setSaving(true);
+
+        const orderedDays = WEEKDAYS.filter((day) =>
+            form.meetingDays.includes(day)
+        );
 
         const payload = {
             courseId,
             semesterId: Number(form.semesterId),
             professorId: Number(form.professorId),
-            capacity: Number(form.capacity),
-            schedule: form.schedule,
+            capacity,
+            schedule: `${orderedDays.join("/")} ${form.startTime}-${form.endTime}`,
         };
 
         try {
@@ -339,33 +396,85 @@ export const ManageSectionsPage = () => {
                                         })
                                     }
                                 >
-                                    <option value={user.id}>
-                                        {user.name} (me)
-                                    </option>
-                                    {professors
-                                        .filter((p) => p.id !== user.id)
-                                        .map((p) => (
-                                            <option key={p.id} value={p.id}>
-                                                {p.name}
-                                            </option>
-                                        ))}
+                                    {professors.map((p) => (
+                                        <option key={p.id} value={p.id}>
+                                            {p.name}
+                                        </option>
+                                    ))}
                                 </select>
                             </Field>
                         )}
 
-                        <Field label="Schedule">
-                            <input
-                                className={inputClass}
-                                value={form.schedule}
-                                onChange={(e) =>
-                                    setForm({
-                                        ...form,
-                                        schedule: e.target.value,
-                                    })
-                                }
-                                placeholder="Mon/Wed 10:00-11:30"
-                            />
+                        <Field label="Meeting days">
+                            <div className="flex flex-wrap gap-2">
+                                {WEEKDAYS.map((day) => {
+                                    const selected =
+                                        form.meetingDays.includes(day);
+
+                                    return (
+                                        <label
+                                            key={day}
+                                            className={`cursor-pointer rounded-lg border px-3 py-2 text-sm ${
+                                                selected
+                                                    ? "border-zinc-900 bg-zinc-900 text-white"
+                                                    : "border-zinc-200 bg-white text-zinc-700"
+                                            }`}
+                                        >
+                                            <input
+                                                type="checkbox"
+                                                className="sr-only"
+                                                checked={selected}
+                                                onChange={() =>
+                                                    setForm({
+                                                        ...form,
+                                                        meetingDays: selected
+                                                            ? form.meetingDays.filter(
+                                                                  (value) =>
+                                                                      value !==
+                                                                      day
+                                                              )
+                                                            : [
+                                                                  ...form.meetingDays,
+                                                                  day,
+                                                              ],
+                                                    })
+                                                }
+                                            />
+                                            {day}
+                                        </label>
+                                    );
+                                })}
+                            </div>
                         </Field>
+
+                        <div className="grid grid-cols-2 gap-3">
+                            <Field label="Start time">
+                                <input
+                                    type="time"
+                                    className={inputClass}
+                                    value={form.startTime}
+                                    onChange={(e) =>
+                                        setForm({
+                                            ...form,
+                                            startTime: e.target.value,
+                                        })
+                                    }
+                                />
+                            </Field>
+                            <Field label="End time">
+                                <input
+                                    type="time"
+                                    className={inputClass}
+                                    value={form.endTime}
+                                    onChange={(e) =>
+                                        setForm({
+                                            ...form,
+                                            endTime: e.target.value,
+                                        })
+                                    }
+                                />
+                            </Field>
+                        </div>
 
                         <Field label="Capacity">
                             <input
