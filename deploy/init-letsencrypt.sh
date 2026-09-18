@@ -49,6 +49,29 @@ compose run --rm --entrypoint openssl certbot req \
 
 compose up -d nginx
 
+probe_name="educore-certbot-probe"
+probe_value="educore-certbot-ready"
+probe_path="deploy/certbot/www/.well-known/acme-challenge/$probe_name"
+mkdir -p "$(dirname "$probe_path")"
+printf '%s\n' "$probe_value" > "$probe_path"
+
+challenge_ready=0
+for _ in {1..10}; do
+    if [[ "$(compose exec -T nginx wget -qO- \
+        "http://127.0.0.1/.well-known/acme-challenge/$probe_name" 2>/dev/null || true)" == "$probe_value" ]]; then
+        challenge_ready=1
+        break
+    fi
+    sleep 1
+done
+rm -f "$probe_path"
+
+if [[ "$challenge_ready" != "1" ]]; then
+    echo "Nginx cannot serve files from the Certbot challenge directory; certificate issuance was not attempted." >&2
+    echo "Inspect it with: docker compose --env-file $env_file -f docker-compose.prod.yml exec nginx nginx -T" >&2
+    exit 1
+fi
+
 staging_args=()
 if [[ "${CERTBOT_STAGING:-0}" != "0" ]]; then
     staging_args+=(--staging)

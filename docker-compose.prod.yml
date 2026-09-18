@@ -68,6 +68,7 @@ services:
       NGINX_ENVSUBST_FILTER: DOMAIN
     volumes:
       - ./deploy/nginx/default.conf.template:/etc/nginx/templates/default.conf.template:ro
+      - ./deploy/nginx/99-auto-reload.sh:/docker-entrypoint.d/99-auto-reload.sh:ro
       - ./deploy/certbot/www:/var/www/certbot:ro
       - ./deploy/certbot/conf:/etc/letsencrypt:ro
     ports:
@@ -78,9 +79,6 @@ services:
         condition: service_started
       backend:
         condition: service_started
-    command: >-
-      /bin/sh -c 'while :; do sleep 6h; nginx -s reload; done &
-      exec nginx -g "daemon off;"'
     networks:
       - internal
 

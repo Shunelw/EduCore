@@ -278,6 +278,10 @@ real issuance, stop the stack, change the value back to `0`, move
 Keeping the renamed directory provides a recoverable backup while ensuring
 Certbot creates a new production certificate lineage.
 
+If certificate issuance is interrupted, fix the reported network or DNS
+problem and rerun the same helper. It recreates the temporary certificate and
+continues the bootstrap process.
+
 For later application updates, rebuild and restart the stack with:
 
 ```bash
